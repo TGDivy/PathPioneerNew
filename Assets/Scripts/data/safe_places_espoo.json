@@ -1,0 +1,87 @@
+[
+  {
+    "id": "keilaniemi_metro",
+    "name": "Keilaniemi Metro Station",
+    "category": "Metro Station",
+    "latitude": 60.1789,
+    "longitude": 24.8323
+  },
+  {
+    "id": "aalto_metro",
+    "name": "Aalto University Metro Station",
+    "category": "Metro Station",
+    "latitude": 60.1844,
+    "longitude": 24.8276
+  },
+  {
+    "id": "tapiola_metro",
+    "name": "Tapiola Metro Station",
+    "category": "Metro Station",
+    "latitude": 60.1773,
+    "longitude": 24.805
+  },
+  {
+    "id": "tapiola_bus_terminal",
+    "name": "Tapiola Bus Terminal",
+    "category": "Bus Station",
+    "latitude": 60.1781,
+    "longitude": 24.8046
+  },
+  {
+    "id": "matinkyla_metro",
+    "name": "Matinkylä Metro Station",
+    "category": "Metro Station",
+    "latitude": 60.1583,
+    "longitude": 24.7372
+  },
+  {
+    "id": "iso_omena",
+    "name": "Iso Omena Shopping Centre",
+    "category": "Shopping Centre",
+    "latitude": 60.1599,
+    "longitude": 24.7386
+  },
+  {
+    "id": "leppavaara_station",
+    "name": "Leppävaara Railway Station",
+    "category": "Train Station",
+    "latitude": 60.2196,
+    "longitude": 24.8123
+  },
+  {
+    "id": "sello",
+    "name": "Sello Shopping Centre",
+    "category": "Shopping Centre",
+    "latitude": 60.2201,
+    "longitude": 24.8127
+  },
+  {
+    "id": "espoo_centre_station",
+    "name": "Espoo Centre (Espoon keskus) Station",
+    "category": "Train Station",
+    "latitude": 60.2053,
+    "longitude": 24.6594
+  },
+  {
+    "id": "espoonlahti_metro",
+    "name": "Espoonlahti Metro Station",
+    "category": "Metro Station",
+    "latitude": 60.145,
+    "longitude": 24.654
+  },
+  {
+    "id": "espoo_police",
+    "name": "Espoo Police Station (Nihtisilta)",
+    "category": "Police Station",
+    "latitude": 60.2178,
+    "longitude": 24.8005
+  },
+  {
+    "id": "a_bloc",
+    "name": "A Bloc (Otaniemi)",
+    "category": "Shopping Centre",
+    "latitude": 60.1849,
+    "longitude": 24.8277
+  }
+]
+
