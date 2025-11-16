@@ -8,6 +8,12 @@ interface SpawnedArrowData {
     id: number
 }
 
+// we have a single arrows spawner in the scene
+// the arrows are spawned along the path at given positions using a prefab at left and right side of the path
+// we limit the number of arrows spawned at a time to save performance
+// as player moves forward along the path, we despawn the oldest arrows and spawn new ones ahead
+// we also want to compute whenever there is a big turn in the path to spwawn danger arrows opposite to the turn direction and some distance ahead of the player (not implemented yet)
+
 @component
 export class ArrowsSpawner extends BaseScriptComponent {
 
@@ -26,9 +32,20 @@ export class ArrowsSpawner extends BaseScriptComponent {
 
     @input
     private pfbSideArrow: ObjectPrefab;
+    
+    @input
+    private pfbDanger: ObjectPrefab;
 
     @input
     private arrowMaterial: Material
+
+    // angle in degrees above which we consider a turn "sharp"
+    @input
+    private sharpTurnAngle: number = 30;
+
+    // how far ahead (world units) to spawn the danger marker from the current point when a sharp turn is detected
+    @input
+    private dangerAheadDistance: number = 300;
 
     private updateEvent: SceneEvent;
     private positions: vec3[] = [];
@@ -164,11 +181,29 @@ export class ArrowsSpawner extends BaseScriptComponent {
         let rot = quat.lookAt(fwd, up);
 
         const {leftArrow, rightArrow} = this.instantiateSideArrowObj(currentPosition, rot); // pass pos and rot
+
+        // assemble objects for this spawn; by default left and right arrows
+        const objectsArr: SceneObject[] = [leftArrow, rightArrow];
+
+        // detect sharp turn and spawn danger marker ahead on the side opposite to the turn
+        try {
+            const turnInfo = this.isSharpTurnAt(currentId);
+            if (turnInfo.sharp && this.pfbDanger){
+                const aheadPos = currentPosition.add(fwd.uniformScale(this.dangerAheadDistance));
+                const oppositeSideSign = turnInfo.sign === 0 ? 1 : -turnInfo.sign;
+                const dangerObj = this.instantiateDangerAt(aheadPos, rot, oppositeSideSign);
+                if (dangerObj) objectsArr.push(dangerObj);
+            }
+        } catch (e) {
+            // ignore detection errors to avoid breaking arrow spawn
+        }
+
         this.spawnedArrows.push({
             pointPosition: currentPosition,
-            objects: [leftArrow, rightArrow],
+            objects: objectsArr,
             id: currentId
-        })
+        });
+
         this.incrementNextId(currentPosition);
     }
 
@@ -196,6 +231,69 @@ export class ArrowsSpawner extends BaseScriptComponent {
         rightArrow.getChild(0).getChild(0).getComponent("RenderMeshVisual").mainMaterial = this.arrowMaterial;
 
         return {leftArrow, rightArrow};
+    }
+
+    // returns whether there is a sharp turn at `index` using neighboring points
+    private isSharpTurnAt(index: number){
+        return { sharp: true, angleDeg: 45, sign: 1 };
+        if (!this.positions || this.positions.length < 3){
+            return { sharp: false, angleDeg: 0, sign: 0 };
+        }
+        const len = this.positions.length;
+        // ensure valid neighbors (clamp at edges)
+        const prevIndex = Math.max(0, index - 1);
+        const nextIndex = Math.min(len - 1, index + 1);
+
+        const prevPos = this.positions[prevIndex];
+        const curPos = this.positions[index];
+        const nextPos = this.positions[nextIndex];
+
+        let vA = curPos.sub(prevPos);
+        let vB = nextPos.sub(curPos);
+
+        // project onto horizontal plane (ignore vertical changes for turn detection)
+        vA.y = 0;
+        vB.y = 0;
+
+        if (vA.length === 0 || vB.length === 0){
+            return { sharp: false, angleDeg: 0, sign: 0 };
+        }
+
+        vA = vA.normalize();
+        vB = vB.normalize();
+
+        // signed angle via cross.y and dot
+        const dot = Math.max(-1, Math.min(1, vA.dot(vB)));
+        const angleRad = Math.acos(dot);
+        const angleDeg = angleRad * (180 / Math.PI);
+
+        const cross = vA.cross(vB);
+        const sign = Math.sign(cross.y || 0); // +1 left, -1 right (assuming Y-up)
+
+        return { sharp: Math.abs(angleDeg) >= this.sharpTurnAngle, angleDeg, sign };
+    }
+
+    // instantiate the pfbDanger object at a position offset opposite to the turn sign
+    private instantiateDangerAt(basePosition: vec3, rotation: quat, sideSign: number){
+        if (!this.pfbDanger) return null;
+
+        const radius = 120;
+        const height = 45;
+
+        const { forward, right, up } = GetVectorsFromQuaternion.getInstance().getVectorsFromQuaternion(rotation);
+
+        // sideSign: +1 means we should offset to the right side; to spawn opposite of turn we pass opposite sign
+        const sideOffset = right.uniformScale(radius * sideSign);
+        const heightOffset = up.uniformScale(height);
+
+        const spawnPos = basePosition.add(sideOffset).add(heightOffset);
+
+        const dangerObj = this.pfbDanger.instantiate(null);
+        dangerObj.getTransform().setWorldPosition(spawnPos);
+        // make it face same general forward direction
+        dangerObj.getTransform().setWorldRotation(rotation);
+
+        return dangerObj;
     }
 
     private trySpawnNextArrows(){

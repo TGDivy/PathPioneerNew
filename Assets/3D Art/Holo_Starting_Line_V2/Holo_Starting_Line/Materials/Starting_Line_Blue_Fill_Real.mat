@@ -149,7 +149,7 @@
       value: 1.000000
     Tweak_N6:
       typeIdx: 5
-      value: {x: 0.000000, y: 0.545007, z: 1.000000, w: 1.000000}
+      value: {x: 1.000000, y: 0.149126, z: 0.000000, w: 1.000000}
     baseTex:
       typeIdx: 9
       value:

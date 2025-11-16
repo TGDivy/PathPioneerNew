@@ -27,11 +27,14 @@
   PackagePolicy: CanBeUnpacked
   ScriptInputsHidden:
     arrowMaterial: false
+    dangerAheadDistance: false
     mainCamera: false
     maxArrows: false
     minimalDistanceBetweenArrows: false
+    pfbDanger: false
     pfbSideArrow: false
     revealDistance: false
+    sharpTurnAngle: false
   ScriptTypesHidden:
     {}
   ReadMe: !<reference> 00000000-0000-0000-0000-000000000000
@@ -46,7 +49,10 @@
       revealDistance: !<float> 1000.000000
       minimalDistanceBetweenArrows: !<float> 100.000000
       pfbSideArrow: !<reference.ObjectPrefab> 00000000-0000-0000-0000-000000000000
+      pfbDanger: !<reference.ObjectPrefab> 00000000-0000-0000-0000-000000000000
       arrowMaterial: !<reference.Material> 00000000-0000-0000-0000-000000000000
+      sharpTurnAngle: !<float> 30.000000
+      dangerAheadDistance: !<float> 200.000000
   ScriptTypes:
     -
       {}
@@ -56,4 +62,7 @@
     - // @input float revealDistance = 1000
     - // @input float minimalDistanceBetweenArrows = 100
     - // @input Asset.ObjectPrefab pfbSideArrow
+    - // @input Asset.ObjectPrefab pfbDanger
     - // @input Asset.Material arrowMaterial
+    - // @input float sharpTurnAngle = 30
+    - // @input float dangerAheadDistance = 300
