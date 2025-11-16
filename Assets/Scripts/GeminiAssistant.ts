@@ -13,8 +13,8 @@ import { setTimeout } from "SpectaclesInteractionKit.lspkg/Utils/FunctionTimingU
 
 require("LensStudio:RawLocationModule");
 
-// Embedded memory layer: curated safe places in Espoo, Finland (subset; demo-only).
-// For flexibility, the same data also exists as JSON in Assets/Scripts/data/safe_places_espoo.json
+// Embedded memory layer: curated safe places (subset; demo-only).
+// A larger dataset also exists as JSON in Assets/Scripts/data/safe_places.json
 interface SafePlace {
   id: string;
   name: string;
@@ -23,7 +23,7 @@ interface SafePlace {
   longitude: number;
 }
 
-const SAFE_PLACES_ESPOO: SafePlace[] = [
+const SAFE_PLACES_FALLBACK: SafePlace[] = [
   {
     id: "keilaniemi_metro",
     name: "Keilaniemi Metro Station",
@@ -176,6 +176,9 @@ export class GeminiAssistant extends BaseScriptComponent {
   private locationService: any;
   private repeatUpdateUserLocation: any;
 
+  // Runtime dataset loaded from Assets/Scripts/data/safe_places.json if available
+  private safePlacesDynamic: SafePlace[] = [];
+
   public updateTextEvent: Event<{ text: string; completed: boolean }> =
     new Event<{ text: string; completed: boolean }>();
 
@@ -192,6 +195,8 @@ export class GeminiAssistant extends BaseScriptComponent {
     // Initialize location tracking so we always have up-to-date
     // GPS coordinates and heading before/while talking to Gemini.
     this.createEvent("OnStartEvent").bind(() => {
+      // Best-effort load of extended safe places dataset
+      this.tryLoadSafePlacesFromJson();
       this.initializeLocationService();
     });
 
@@ -373,7 +378,27 @@ export class GeminiAssistant extends BaseScriptComponent {
 
             this.sendFunctionCallUpdate(functionCall.name, responseJson);
           } else if (functionCall.name === "get_nearby_places") {
-            const placesResponse = this.buildNearbyPlacesPayload();
+            let category: string | undefined = undefined;
+            let limit: number | undefined = undefined;
+            try {
+              const argsAny: any =
+                (functionCall as any).args ??
+                (functionCall as any).arguments ??
+                undefined;
+              if (argsAny) {
+                const parsed =
+                  typeof argsAny === "string" ? JSON.parse(argsAny) : argsAny;
+                if (parsed && typeof parsed.category === "string") {
+                  category = parsed.category;
+                }
+                if (parsed && typeof parsed.limit === "number") {
+                  limit = parsed.limit;
+                }
+              }
+            } catch (e) {
+              print("get_nearby_places args parse error: " + e);
+            }
+            const placesResponse = this.buildNearbyPlacesPayload(category, limit);
             const responseJson = JSON.stringify(placesResponse);
             print("get_nearby_places tool invoked. Payload: " + responseJson);
             this.sendFunctionCallUpdate(functionCall.name, responseJson);
@@ -517,11 +542,21 @@ export class GeminiAssistant extends BaseScriptComponent {
           {
             name: "get_nearby_places",
             description:
-              "Returns curated nearby safer places in Espoo, Finland (e.g., metro stations, shopping centres), filtered by distance from the user's current location.",
+              "Returns nearby safer places (e.g., metro stations, shopping centres, cafés, libraries), filtered by distance from the user's current location. Optionally filter by a place category.",
             parameters: {
-              // MVP: no arguments; uses current user location.
               type: "object",
-              properties: {},
+              properties: {
+                category: {
+                  type: "string",
+                  description:
+                    "Optional place category to filter by, e.g. 'cafe', 'restaurant', 'library', 'metro station', 'shopping centre', 'pub', 'station'. Case-insensitive.",
+                },
+                limit: {
+                  type: "number",
+                  description:
+                    "Optional maximum number of results to return. Defaults to 6.",
+                },
+              },
             },
           },
         ],
@@ -633,7 +668,10 @@ export class GeminiAssistant extends BaseScriptComponent {
   }
 
   // Build a structured payload for the get_nearby_places Gemini tool.
-  private buildNearbyPlacesPayload(): any {
+  private buildNearbyPlacesPayload(
+    requestedCategory?: string,
+    limit?: number
+  ): any {
     if (this.latitude === undefined || this.longitude === undefined) {
       print("get_nearby_places requested but location is not yet available.");
       return {
@@ -643,8 +681,32 @@ export class GeminiAssistant extends BaseScriptComponent {
       };
     }
 
-    // Compute distance and bearing to each curated place, sort by distance.
-    const withDistance = SAFE_PLACES_ESPOO.map((p) => {
+    const dataSource =
+      this.safePlacesDynamic && this.safePlacesDynamic.length > 0
+        ? this.safePlacesDynamic
+        : SAFE_PLACES_FALLBACK;
+
+    // Optional category filter (case-insensitive, simple contains match)
+    const normalizedCategory =
+      requestedCategory && typeof requestedCategory === "string"
+        ? requestedCategory.trim().toLowerCase()
+        : undefined;
+
+    const filtered = dataSource.filter((p) => {
+      if (!normalizedCategory) {
+        return true;
+      }
+      const cat = (p.category || "").toLowerCase();
+      const name = (p.name || "").toLowerCase();
+      // allow simple phrase matches like "cafe" in type/name, and common synonyms
+      const synonyms = this.expandCategorySynonyms(normalizedCategory);
+      return (
+        synonyms.some((s) => cat.indexOf(s) >= 0 || name.indexOf(s) >= 0)
+      );
+    });
+
+    // Compute distance and bearing to each place, sort by distance.
+    const withDistance = filtered.map((p) => {
       const distanceMeters = this.computeDistanceMeters(
         this.latitude,
         this.longitude,
@@ -670,8 +732,10 @@ export class GeminiAssistant extends BaseScriptComponent {
       };
     }).sort((a, b) => a.distanceMeters - b.distanceMeters);
 
-    // Limit results to the closest 6 to keep responses concise.
-    const top = withDistance.slice(0, 6);
+    // Limit results (default to closest 6 to keep responses concise).
+    const cap =
+      typeof limit === "number" && limit > 0 && isFinite(limit) ? limit : 6;
+    const top = withDistance.slice(0, cap);
 
     return {
       success: true,
@@ -683,7 +747,9 @@ export class GeminiAssistant extends BaseScriptComponent {
       },
       places: top,
       note:
-        "This is a curated, demo-only list of busier/safer public venues in Espoo for MVP.",
+        this.safePlacesDynamic.length > 0
+          ? "Results sourced from the local safe_places.json dataset."
+          : "Using a small embedded fallback dataset.",
     };
   }
 
@@ -735,8 +801,8 @@ export class GeminiAssistant extends BaseScriptComponent {
     return (
       "You are a safety-aware night companion. Your primary goal is to keep the user calm and informed.\n" +
       "- Always ground advice in the provided location and nearby places.\n" +
-      "- Prefer busier, well-lit venues (metro stations, shopping centres, cafés, hotels, transit stops).\n" +
-      "- When asked about safety, first call get_user_location, then get_nearby_places to contextualize guidance.\n" +
+      "- Prefer busier, well-lit venues (metro stations, shopping centres, cafés, libraries, hotels, transit stops).\n" +
+      "- When asked about safety or requests like 'nearest cafe', first call get_user_location, then get_nearby_places with an appropriate category (e.g., 'cafe').\n" +
       "- If information is uncertain or stale, say so and choose conservative guidance.\n" +
       "- Be concise, supportive, and avoid alarming language. Offer clear next steps and distances.\n" +
       "- Output format requirement: Return plain text only. Do NOT use Markdown or any special formatting (no bullet points, code fences, headings, links, or inline markup)."
@@ -759,5 +825,112 @@ export class GeminiAssistant extends BaseScriptComponent {
     } else {
       print("DynamicAudioOutput is not initialized.");
     }
+  }
+
+  // Attempt to load the extended dataset from JSON file using Lens Studio's module loader.
+  // If unavailable (e.g., environment does not support requiring JSON directly), silently fallback.
+  private tryLoadSafePlacesFromJson(): void {
+    try {
+      // Relative to this script's folder (Assets/Scripts)
+      const raw: any = require("./data/safe_places.json");
+      if (!raw || !raw.length) {
+        print("safe_places.json appears empty or invalid; using fallback dataset.");
+        return;
+      }
+      // Normalize records from { name, type, lat, lon, openingHours? } to SafePlace
+      const normalized: SafePlace[] = [];
+      for (let i = 0; i < raw.length; i++) {
+        const r = raw[i];
+        if (
+          r &&
+          typeof r.name === "string" &&
+          typeof r.lat === "number" &&
+          typeof r.lon === "number"
+        ) {
+          const category =
+            typeof r.type === "string" && r.type.trim().length > 0
+              ? this.normalizeCategory(r.type)
+              : "Place";
+          const id =
+            this.slugify(r.name) +
+            "_" +
+            String(r.lat.toFixed(6)) +
+            "_" +
+            String(r.lon.toFixed(6));
+          normalized.push({
+            id,
+            name: r.name,
+            category,
+            latitude: r.lat,
+            longitude: r.lon,
+          });
+        }
+      }
+      if (normalized.length > 0) {
+        this.safePlacesDynamic = normalized;
+        print(
+          "Loaded extended safe places dataset from safe_places.json: " +
+            normalized.length +
+            " records."
+        );
+      } else {
+        print(
+          "No valid entries parsed from safe_places.json; using fallback dataset."
+        );
+      }
+    } catch (e) {
+      // Most likely require() for JSON not supported in current environment
+      print(
+        "Failed to load Assets/Scripts/data/safe_places.json via require(): " + e
+      );
+    }
+  }
+
+  private normalizeCategory(category: string): string {
+    const c = category.trim().toLowerCase();
+    // Unify a few common variants
+    if (c === "fast_food" || c === "fast food") return "Fast Food";
+    if (c === "cafe" || c === "coffee" || c === "coffee_shop") return "Cafe";
+    if (c === "pub" || c === "bar") return "Pub";
+    if (c === "restaurant") return "Restaurant";
+    if (c === "library") return "Library";
+    if (c === "station" || c === "train station") return "Station";
+    if (c === "metro" || c === "metro station") return "Metro Station";
+    if (c === "shopping" || c === "shopping centre" || c === "shopping_center")
+      return "Shopping Centre";
+    return category;
+  }
+
+  private expandCategorySynonyms(normalized: string): string[] {
+    const c = normalized.toLowerCase();
+    if (c.indexOf("cafe") >= 0 || c.indexOf("coffee") >= 0) {
+      return ["cafe", "coffee"];
+    }
+    if (c.indexOf("restaurant") >= 0 || c.indexOf("food") >= 0) {
+      return ["restaurant", "food", "eatery", "bistro"];
+    }
+    if (c.indexOf("pub") >= 0 || c.indexOf("bar") >= 0) {
+      return ["pub", "bar"];
+    }
+    if (c.indexOf("library") >= 0) {
+      return ["library"];
+    }
+    if (c.indexOf("metro") >= 0) {
+      return ["metro", "metro station"];
+    }
+    if (c.indexOf("station") >= 0) {
+      return ["station", "train station"];
+    }
+    if (c.indexOf("shop") >= 0 || c.indexOf("mall") >= 0) {
+      return ["shopping", "shopping centre", "mall", "market"];
+    }
+    return [c];
+  }
+
+  private slugify(name: string): string {
+    return name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
   }
 }

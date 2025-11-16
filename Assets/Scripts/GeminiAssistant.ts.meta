@@ -45,7 +45,7 @@
     - websocketRequirementsObj: !<reference.SceneObject> 00000000-0000-0000-0000-000000000000
       dynamicAudioOutput: !<MappingBased.AssignableType> 00000000-0000-0000-0000-000000000000
       microphoneRecorder: !<MappingBased.AssignableType_1> 00000000-0000-0000-0000-000000000000
-      instructions: You are a helpful assistant that loves to make puns
+      instructions: ""
       haveVideoInput: false
       haveAudioOutput: false
       voice: Puck
