@@ -14813,17 +14813,20 @@
   Enabled: true
   ScriptAsset: !<reference> b28037ef-ba73-4afe-b57c-949c4fc629b4
   ScriptInputsDefault:
-    {}
+    dangerAheadDistance: true
   ScriptTypesDefault:
     {}
   ScriptInputs:
     "":
       mainCamera: !<reference.Camera> 498bc8e5-e350-451e-bf8c-0be6e5122ccf
-      maxArrows: !<float> 10.000000
+      maxArrows: !<float> 20.000000
       revealDistance: !<float> 1500.000000
       minimalDistanceBetweenArrows: !<float> 300.000000
       pfbSideArrow: !<reference.ObjectPrefab> 8e804c49-711a-4d0d-ac49-da4672642454
+      pfbDanger: !<reference.ObjectPrefab> 7a4f647c-332d-4866-b9fd-3c480133c38f
       arrowMaterial: !<reference.Material> 61eb84bf-8540-4c94-a013-a4079e0c7c15
+      sharpTurnAngle: !<float> 10.000000
+      dangerAheadDistance: !<float> 200.000000
   ScriptTypes:
     "":
       {}
