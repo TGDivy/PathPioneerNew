@@ -185,13 +185,15 @@ export class ArrowsSpawner extends BaseScriptComponent {
         // assemble objects for this spawn; by default left and right arrows
         const objectsArr: SceneObject[] = [leftArrow, rightArrow];
 
-        // detect sharp turn and spawn danger marker ahead on the side opposite to the turn
+        // detect sharp turn and spawn danger marker on the opposite side of the turn
         try {
             const turnInfo = this.isSharpTurnAt(currentId);
             if (turnInfo.sharp && this.pfbDanger){
-                const aheadPos = currentPosition.add(fwd.uniformScale(this.dangerAheadDistance));
+                // spawn danger on the opposite side of where the path is turning
+                // turnInfo.sign: +1 = left turn, -1 = right turn
+                // so we spawn on the opposite side: -sign
                 const oppositeSideSign = turnInfo.sign === 0 ? 1 : -turnInfo.sign;
-                const dangerObj = this.instantiateDangerAt(aheadPos, rot, oppositeSideSign);
+                const dangerObj = this.instantiateDangerAt(currentPosition, rot, oppositeSideSign);
                 if (dangerObj) objectsArr.push(dangerObj);
             }
         } catch (e) {
@@ -233,16 +235,17 @@ export class ArrowsSpawner extends BaseScriptComponent {
         return {leftArrow, rightArrow};
     }
 
-    // returns whether there is a sharp turn at `index` using neighboring points
+    // returns whether there is a sharp turn at `index` using a wider lookahead window
     private isSharpTurnAt(index: number){
-        return { sharp: true, angleDeg: 45, sign: 1 };
+        // return { sharp: true, angleDeg: 45, sign: 1 }; // --- IGNORE ---
         if (!this.positions || this.positions.length < 3){
             return { sharp: false, angleDeg: 0, sign: 0 };
         }
         const len = this.positions.length;
-        // ensure valid neighbors (clamp at edges)
-        const prevIndex = Math.max(0, index - 1);
-        const nextIndex = Math.min(len - 1, index + 1);
+        
+        // use a wider lookahead window (2 steps back, 2 steps forward) for more reliable detection
+        const prevIndex = Math.max(0, index - 2);
+        const nextIndex = Math.min(len - 1, index + 2);
 
         const prevPos = this.positions[prevIndex];
         const curPos = this.positions[index];
@@ -277,13 +280,13 @@ export class ArrowsSpawner extends BaseScriptComponent {
     private instantiateDangerAt(basePosition: vec3, rotation: quat, sideSign: number){
         if (!this.pfbDanger) return null;
 
-        const radius = 120;
+        const radius = -200;
         const height = 45;
 
         const { forward, right, up } = GetVectorsFromQuaternion.getInstance().getVectorsFromQuaternion(rotation);
 
         // sideSign: +1 means we should offset to the right side; to spawn opposite of turn we pass opposite sign
-        const sideOffset = right.uniformScale(radius * sideSign);
+        const sideOffset = forward.uniformScale(radius * sideSign);
         const heightOffset = up.uniformScale(height);
 
         const spawnPos = basePosition.add(sideOffset).add(heightOffset);
