@@ -13,15 +13,13 @@ metaInfo:
     []
   tags:
     []
-  lensName: Path Pioneer
+  lensName: currents3
   lensDescriptors:
-    []
+    - EXPERIMENTAL_API
   lensApplicability:
     - Front
     - Back
   lensClientCompatibilities:
-    - Mobile
-    - Web
     - Spectacles
   platformBundlesEnabled: false
   iconHash: d3f856d48d565a015f271e4e6ece0bae
