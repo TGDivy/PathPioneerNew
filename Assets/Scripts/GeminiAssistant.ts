@@ -110,6 +110,23 @@ const SAFE_PLACES_ESPOO: SafePlace[] = [
   },
 ];
 
+// Minimal locality database for coarse reverse-geocoding without exposing raw coordinates.
+interface Locality {
+  city: string;
+  country: string;
+  latitude: number;
+  longitude: number;
+}
+
+const KNOWN_LOCALITIES: Locality[] = [
+  { city: "Espoo", country: "Finland", latitude: 60.2055, longitude: 24.6559 },
+  { city: "Helsinki", country: "Finland", latitude: 60.1699, longitude: 24.9384 },
+  { city: "Vantaa", country: "Finland", latitude: 60.2934, longitude: 25.0378 },
+  { city: "Kauniainen", country: "Finland", latitude: 60.2091, longitude: 24.7272 },
+  { city: "Turku", country: "Finland", latitude: 60.4518, longitude: 22.2666 },
+  { city: "Tampere", country: "Finland", latitude: 61.4991, longitude: 23.7871 },
+];
+
 @component
 export class GeminiAssistant extends BaseScriptComponent {
   @ui.separator
@@ -490,24 +507,9 @@ export class GeminiAssistant extends BaseScriptComponent {
       {
         function_declarations: [
           {
-            name: "Snap3D",
-            description: "Generates a 3D model based on a text prompt",
-            parameters: {
-              type: "object",
-              properties: {
-                prompt: {
-                  type: "string",
-                  description:
-                    "The text prompt to generate a 3D model from. Cartoonish styles work best. Use 'full body' when generating characters.",
-                },
-              },
-              required: ["prompt"],
-            },
-          },
-          {
             name: "get_user_location",
             description:
-              "Returns the user's latest known GPS coordinates, altitude, accuracy and heading from Spectacles.",
+              "Returns an approximate locality (city and country) inferred from the user's location. Never returns raw coordinates.",
             parameters: {
               // No arguments required; always returns the most recent location.
               type: "object",
@@ -517,7 +519,7 @@ export class GeminiAssistant extends BaseScriptComponent {
           {
             name: "get_nearby_places",
             description:
-              "Returns curated nearby safer places in Espoo, Finland (e.g., metro stations, shopping centres), filtered by distance from the user's current location.",
+              "Returns curated nearby safer places in Espoo, Finland (e.g., metro stations, shopping centres) with distances from the user. Does not include raw user coordinates.",
             parameters: {
               // MVP: no arguments; uses current user location.
               type: "object",
@@ -537,27 +539,14 @@ export class GeminiAssistant extends BaseScriptComponent {
       (this.instructions ? this.instructions : "");
 
     if (this.latitude !== undefined && this.longitude !== undefined) {
+      const locality = this.inferLocalityFromLatLon(
+        this.latitude,
+        this.longitude
+      );
       systemInstructionText +=
-        "\n\nUser current real-world location (from Spectacles):\n" +
-        "- latitude: " +
-        this.latitude.toFixed(6) +
-        "\n" +
-        "- longitude: " +
-        this.longitude.toFixed(6) +
+        "\n\nUser current locality (approximate): " +
+        locality.formatted +
         "\n";
-
-      if (this.altitude !== undefined) {
-        systemInstructionText +=
-          "- altitudeMeters: " + this.altitude.toFixed(1) + "\n";
-      }
-
-      if (this.horizontalAccuracy !== undefined) {
-        systemInstructionText +=
-          "- horizontalAccuracyMeters: " +
-          this.horizontalAccuracy.toFixed(1) +
-          "\n";
-      }
-
       if (this.headingDegrees !== undefined) {
         systemInstructionText +=
           "- headingDegreesFromNorth: " + this.headingDegrees.toFixed(1) + "\n";
@@ -599,36 +588,14 @@ export class GeminiAssistant extends BaseScriptComponent {
       };
     }
 
+    const inferred = this.inferLocalityFromLatLon(this.latitude, this.longitude);
     const payload: any = {
       success: true,
-      latitude: this.latitude,
-      longitude: this.longitude,
+      locality: inferred,
     };
-
-    if (this.altitude !== undefined) {
-      payload.altitudeMeters = this.altitude;
-    }
-
-    if (this.horizontalAccuracy !== undefined) {
-      payload.horizontalAccuracyMeters = this.horizontalAccuracy;
-    }
-
-    if (this.verticalAccuracy !== undefined) {
-      payload.verticalAccuracyMeters = this.verticalAccuracy;
-    }
-
     if (this.headingDegrees !== undefined) {
-      payload.headingDegreesFromNorth = this.headingDegrees;
+      payload.headingDegreesFromNorth = Math.round(this.headingDegrees);
     }
-
-    if (this.locationSource !== undefined) {
-      payload.locationSource = this.locationSource;
-    }
-
-    if (this.timestamp !== undefined) {
-      payload.timestampMs = this.timestamp.getTime();
-    }
-
     return payload;
   }
 
@@ -673,17 +640,15 @@ export class GeminiAssistant extends BaseScriptComponent {
     // Limit results to the closest 6 to keep responses concise.
     const top = withDistance.slice(0, 6);
 
+    const inferred = this.inferLocalityFromLatLon(this.latitude, this.longitude);
     return {
       success: true,
-      userLocation: {
-        latitude: this.latitude,
-        longitude: this.longitude,
-        headingDegreesFromNorth:
-          this.headingDegrees !== undefined ? this.headingDegrees : null,
-      },
+      locality: inferred,
+      headingDegreesFromNorth:
+        this.headingDegrees !== undefined ? Math.round(this.headingDegrees) : null,
       places: top,
       note:
-        "This is a curated, demo-only list of busier/safer public venues in Espoo for MVP.",
+        "This is a curated, demo-only list of busier/safer public venues in Espoo for MVP. No raw user coordinates are included.",
     };
   }
 
@@ -730,6 +695,46 @@ export class GeminiAssistant extends BaseScriptComponent {
     return bearing;
   }
 
+  // Infer a coarse locality (city, country) from latitude/longitude without exposing raw coordinates.
+  private inferLocalityFromLatLon(
+    lat: number,
+    lon: number
+  ): {
+    city: string;
+    country: string;
+    formatted: string;
+    confidence: "high" | "medium" | "low";
+    nearestDistanceKm: number;
+  } {
+    let nearest: Locality | null = null;
+    let minDistanceMeters = Number.POSITIVE_INFINITY;
+    for (const loc of KNOWN_LOCALITIES) {
+      const d = this.computeDistanceMeters(lat, lon, loc.latitude, loc.longitude);
+      if (d < minDistanceMeters) {
+        minDistanceMeters = d;
+        nearest = loc;
+      }
+    }
+    const nearestKm = minDistanceMeters / 1000.0;
+    let confidence: "high" | "medium" | "low" = "low";
+    if (nearestKm <= 10) {
+      confidence = "high";
+    } else if (nearestKm <= 30) {
+      confidence = "medium";
+    } else {
+      confidence = "low";
+    }
+    const city = nearest ? nearest.city : "Unknown";
+    const country = nearest ? nearest.country : "Unknown";
+    return {
+      city: city,
+      country: country,
+      formatted: `${city}, ${country}`,
+      confidence: confidence,
+      nearestDistanceKm: Math.round(nearestKm * 10) / 10,
+    };
+  }
+
   // Safety-first role prompt injected into system_instruction.
   private getSafetyRoleInstruction(): string {
     return (
@@ -739,6 +744,9 @@ export class GeminiAssistant extends BaseScriptComponent {
       "- When asked about safety, first call get_user_location, then get_nearby_places to contextualize guidance.\n" +
       "- If information is uncertain or stale, say so and choose conservative guidance.\n" +
       "- Be concise, supportive, and avoid alarming language. Offer clear next steps and distances.\n" +
+      "- Privacy: Never reveal raw GPS coordinates (latitude/longitude/altitude). Only refer to general locality like city and country. If asked for coordinates, refuse and provide the city and country instead.\n" +
+      "- When using get_user_location, rely only on the returned locality (city, country); do not output numeric coordinates.\n" +
+      "- When you communicate the user's location, use this phrasing: 'Based on your location, you are in <city>, <country>.'\n" +
       "- Output format requirement: Return plain text only. Do NOT use Markdown or any special formatting (no bullet points, code fences, headings, links, or inline markup)."
     );
   }
