@@ -94,7 +94,7 @@ Built with love at **Hack Junction 2025**.
 
 YourWalk was created by:
 
-- Divy  
-- (Add teammate names)  
-
----
+- Bora
+- Divy
+- Na
+- Noah
