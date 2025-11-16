@@ -352,10 +352,10 @@ export class PathWalker extends BaseScriptComponent {
         // this.startLineController = myStartLineTr.getSceneObject().getComponent(LineController.getTypeName());
         // this.startLineController.setEnableWalkCountdown();
 
-        if (!isNull(myFinishLineTr)) {
-            this.finishLineController = myFinishLineTr.getSceneObject().getComponent(LineController.getTypeName());
-            this.finishLineController.setEnableWalkCountdown();
-        }
+        // if (!isNull(myFinishLineTr)) {
+            // this.finishLineController = myFinishLineTr.getSceneObject().getComponent(LineController.getTypeName());
+            // this.finishLineController.setEnableWalkCountdown();
+        // }
 
         this.createEvent("UpdateEvent").bind(() => this.onUpdate());
         this.currentState = PathWalkerState.GoToStart;
