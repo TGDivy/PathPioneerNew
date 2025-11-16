@@ -57,7 +57,7 @@ export class AIAssistantUIBridge extends BaseScriptComponent {
     this.geminiButton.onInitialized.add(() => {
       this.geminiButton.onTriggerUp.add(() => {
         this.assistantType = AssistantType.Gemini;
-        this.hintTitle.text = "Gemini Live Example";
+        this.hintTitle.text = "Your Walk";
         this.startWebsocketAndUI();
       });
     });
